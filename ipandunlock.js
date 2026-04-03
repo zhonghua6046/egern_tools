@@ -493,6 +493,14 @@ export default async function (ctx) {
         }
         var localPublicIpContent = [localIpData.ip || "\u672A\u83B7\u53D6", locStr].filter(Boolean).join(" - ");
 
+        // ===================== 生成刷新时间标签 =====================
+        var nowObj = new Date();
+        var timeH = nowObj.getHours().toString().padStart(2, '0');
+        var timeM = nowObj.getMinutes().toString().padStart(2, '0');
+        var timeS = nowObj.getSeconds().toString().padStart(2, '0');
+        var refreshTimeStr = '🕒 ' + timeH + ':' + timeM + ':' + timeS;
+
+
         // ===================== 多源评分组装 =====================
         var grades = [
             gradeIppure(ippureScore),
@@ -524,13 +532,14 @@ export default async function (ctx) {
         // ===================== systemMedium - 重新排版 (极度抗重叠) =====================
         if (family === 'systemMedium') {
             
-            // 第一行：只留当前网络，左对齐
+            // 第一行：左侧当前网络，右侧刷新时间
             var row1Network = {
                 type: 'stack', direction: 'row', alignItems: 'center', gap: 5,
                 children: [
                     { type: 'image', src: 'sf-symbol:' + netIcon, color: C_TITLE, width: 12, height: 12 },
                     { type: 'text', text: currentISP, font: { size: 12, weight: 'heavy' }, textColor: C_TITLE, maxLines: 1 },
-                    { type: 'spacer' }
+                    { type: 'spacer' },
+                    { type: 'text', text: refreshTimeStr, font: { size: 9, weight: 'bold', family: 'Menlo' }, textColor: C_SUB }
                 ]
             };
 
@@ -553,7 +562,7 @@ export default async function (ctx) {
                 // 大幅缩减外边距(padding)和行距(gap)，为内容腾出绝对足够的物理空间
                 type: 'widget', padding: [8, 12, 8, 12], gap: 3, backgroundColor: BG_COLOR,
                 children: [
-                    row1Network, // 第 1 行：网络
+                    row1Network, // 第 1 行：网络 + 时间
                     LeftRow('location.circle.fill', C_BLUE, '本地', [{ type: 'text', text: localPublicIpContent, font: { size: 10, weight: 'bold', family: 'Menlo' }, textColor: C_MAIN, maxLines: 1 }], 10), // 第 2 行：本地
                     LeftRow('globe', C_ICON_IP, '落地', mProxyItems, 10), // 第 3 行：代理IP + DCH + 检测结果
                     LeftRow('number.square.fill', C_ICON_IP, '归属', [{ type: 'text', text: asnText, font: { size: 10, weight: 'bold', family: 'Menlo' }, textColor: C_GREEN, maxLines: 1 }], 10), // 第 4 行：归属
@@ -579,7 +588,8 @@ export default async function (ctx) {
                         type: 'stack', direction: 'row', alignItems: 'center', gap: 5, children: [
                             { type: 'image', src: 'sf-symbol:' + netIcon, color: C_TITLE, width: 13, height: 13 },
                             { type: 'text', text: currentISP, font: { size: 12, weight: 'heavy' }, textColor: C_TITLE, maxLines: 1 },
-                            { type: 'spacer' }
+                            { type: 'spacer' },
+                            { type: 'text', text: refreshTimeStr, font: { size: 9, weight: 'bold', family: 'Menlo' }, textColor: C_SUB }
                         ]
                     },
                     LeftRow('location.circle.fill', C_BLUE, '本地', [{ type: 'text', text: localPublicIpContent, font: { size: 10, weight: 'bold', family: 'Menlo' }, textColor: C_MAIN, maxLines: 1, minScale: 0.5 }], 10),
@@ -604,7 +614,8 @@ export default async function (ctx) {
                     type: 'stack', direction: 'row', alignItems: 'center', gap: 6, children: [
                         { type: 'image', src: 'sf-symbol:' + netIcon, color: C_TITLE, width: 16, height: 16 },
                         { type: 'text', text: currentISP, font: { size: 15, weight: 'heavy' }, textColor: C_TITLE },
-                        { type: 'spacer' }
+                        { type: 'spacer' },
+                        { type: 'text', text: refreshTimeStr, font: { size: 11, weight: 'bold', family: 'Menlo' }, textColor: C_SUB }
                     ]
                 },
                 LeftRow('location.circle.fill', C_BLUE, '本地公网', [{ type: 'text', text: localPublicIpContent, font: { size: 11, weight: 'bold', family: 'Menlo' }, textColor: C_MAIN }], 11),
@@ -624,23 +635,3 @@ export default async function (ctx) {
         return { type: 'widget', children: [{ type: 'text', text: '错误: ' + String(e) }] };
     }
 }
-// 获取当前时间
-const now = new Date();
-const hours = now.getHours().toString().padStart(2, '0');
-const minutes = now.getMinutes().toString().padStart(2, '0');
-const seconds = now.getSeconds().toString().padStart(2, '0');
-
-// 组合成带有图标的时间字符串
-const refreshTime = `🕒 ${hours}:${minutes}:${seconds}`;
-
-// 假设原有的小组件内容保存在 content 变量中
-// 我们可以将刷新时间添加到内容的末尾，或者放在您希望显示的位置
-let content = "此处是您的 IP 纯净度和流媒体解锁信息...\n";
-content += `\n最后刷新: ${refreshTime}`;
-
-// 最终返回给面板的格式（以 Surge/Egern 面板为例）
-$done({
-    title: "网络检测面板",
-    content: content,
-    icon: "network"
-});
