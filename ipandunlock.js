@@ -532,15 +532,15 @@ export default async function (ctx) {
         // ===================== systemMedium - 重新排版 (极度抗重叠) =====================
         if (family === 'systemMedium') {
             
-            // 第一行：左侧当前网络，右侧蓝色时钟 + 干净的系统字体时间
+            // 第一行：左侧当前网络，右侧蓝色秒表图标 + Menlo粗体时间
             var row1Network = {
                 type: 'stack', direction: 'row', alignItems: 'center', gap: 5,
                 children: [
                     { type: 'image', src: 'sf-symbol:' + netIcon, color: C_TITLE, width: 12, height: 12 },
                     { type: 'text', text: currentISP, font: { size: 12, weight: 'heavy' }, textColor: C_TITLE, maxLines: 1 },
                     { type: 'spacer' },
-                    { type: 'image', src: 'sf-symbol:clock.fill', color: C_BLUE, width: 10, height: 10 },
-                    { type: 'text', text: refreshTimeStr, font: { size: 10, weight: 'medium' }, textColor: C_SUB }
+                    { type: 'image', src: 'sf-symbol:stopwatch.fill', color: C_BLUE, width: 11, height: 11 },
+                    { type: 'text', text: refreshTimeStr, font: { size: 10, weight: 'bold', family: 'Menlo' }, textColor: C_BLUE }
                 ]
             };
 
@@ -590,8 +590,8 @@ export default async function (ctx) {
                             { type: 'image', src: 'sf-symbol:' + netIcon, color: C_TITLE, width: 13, height: 13 },
                             { type: 'text', text: currentISP, font: { size: 12, weight: 'heavy' }, textColor: C_TITLE, maxLines: 1 },
                             { type: 'spacer' },
-                            { type: 'image', src: 'sf-symbol:clock.fill', color: C_BLUE, width: 10, height: 10 },
-                            { type: 'text', text: refreshTimeStr, font: { size: 10, weight: 'medium' }, textColor: C_SUB }
+                            { type: 'image', src: 'sf-symbol:stopwatch.fill', color: C_BLUE, width: 11, height: 11 },
+                            { type: 'text', text: refreshTimeStr, font: { size: 10, weight: 'bold', family: 'Menlo' }, textColor: C_BLUE }
                         ]
                     },
                     LeftRow('location.circle.fill', C_BLUE, '本地', [{ type: 'text', text: localPublicIpContent, font: { size: 10, weight: 'bold', family: 'Menlo' }, textColor: C_MAIN, maxLines: 1, minScale: 0.5 }], 10),
@@ -617,8 +617,8 @@ export default async function (ctx) {
                         { type: 'image', src: 'sf-symbol:' + netIcon, color: C_TITLE, width: 16, height: 16 },
                         { type: 'text', text: currentISP, font: { size: 15, weight: 'heavy' }, textColor: C_TITLE },
                         { type: 'spacer' },
-                        { type: 'image', src: 'sf-symbol:clock.fill', color: C_BLUE, width: 12, height: 12 },
-                        { type: 'text', text: refreshTimeStr, font: { size: 11, weight: 'medium' }, textColor: C_SUB }
+                        { type: 'image', src: 'sf-symbol:stopwatch.fill', color: C_BLUE, width: 12, height: 12 },
+                        { type: 'text', text: refreshTimeStr, font: { size: 11, weight: 'bold', family: 'Menlo' }, textColor: C_BLUE }
                     ]
                 },
                 LeftRow('location.circle.fill', C_BLUE, '本地公网', [{ type: 'text', text: localPublicIpContent, font: { size: 11, weight: 'bold', family: 'Menlo' }, textColor: C_MAIN }], 11),
