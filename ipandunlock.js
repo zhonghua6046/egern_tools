@@ -8,7 +8,7 @@
 export default async function (ctx) {
     var BG_COLOR = { light: '#FFFFFF', dark: '#1C1C1E' };
     var C_TITLE = { light: '#1A1A1A', dark: '#FFD700' };
-    var C_SUB = { light: '#666666', dark: '#B0B0B0' }; // 还原 A 脚本的次要文本色
+    var C_SUB = { light: '#666666', dark: '#B0B0B0' }; 
     var C_MAIN = { light: '#1A1A1A', dark: '#FFFFFF' };
     var C_GREEN = { light: '#32D74B', dark: '#32D74B' };
     var C_YELLOW = { light: '#FFD60A', dark: '#FFD60A' };
@@ -462,22 +462,43 @@ export default async function (ctx) {
         var loc = (toFlag(cc) + ' ' + country + ' ' + city).trim() || '\u672A\u77E5\u4F4D\u7F6E';
         var hosting = usageText(rIp2loc && rIp2loc.usageType);
 
-        // ===================== 本地网络及公网 IP 逻辑 =====================
+        // ===================== 本地网络及公网 IP 逻辑 (核心优化区) =====================
         var d_ctx = ctx.device || {};
         var wifiSsid = (d_ctx.wifi && d_ctx.wifi.ssid) ? d_ctx.wifi.ssid : "";
         var cellularRadio = (d_ctx.cellular && d_ctx.cellular.radio) ? d_ctx.cellular.radio : "";
         
         var rawISP = (Array.isArray(localIpData.location) ? localIpData.location[localIpData.location.length-1] : "") || (ipapiD.asn && ipapiD.asn.org) || "";
-        var currentISP = wifiSsid || fmtISP(rawISP);
-
-        if (!wifiSsid && currentISP.indexOf("\u7535\u4FE1") !== -1 && cellularRadio) {
-            var map = { GPRS:"2G", EDGE:"2G", LTE:"4G", "LTE-CA":"4G+", NR:"5G" };
-            currentISP = currentISP + " " + (map[cellularRadio] || cellularRadio);
+        
+        // 生成更美观的当前网络名称 (顶栏左上角)
+        var currentISP = wifiSsid;
+        if (!wifiSsid) {
+            var fullISP = fmtISP(rawISP);
+            // 去掉“中国”前缀，让 UI 像原生状态栏一样干净，变成“移动”、“电信”、“联通”等
+            var shortISP = fullISP.replace("中国", ""); 
+            
+            // 如果处于蜂窝网络，智能追加代际 (4G/5G)
+            if (cellularRadio) {
+                var map = { GPRS:"2G", EDGE:"2G", LTE:"4G", "LTE-CA":"4G+", NR:"5G" };
+                var gen = map[cellularRadio] || cellularRadio;
+                currentISP = shortISP + " " + gen;
+            } else {
+                currentISP = shortISP;
+            }
         }
+        
         var netIcon = wifiSsid ? 'wifi' : (cellularRadio ? 'antenna.radiowaves.left.and.right' : 'wifi.slash');
 
         var locStr = "";
+        var localISPName = ""; // 本地 IP 行显示的运营商
         if (Array.isArray(localIpData.location)) {
+            var validLocs = localIpData.location.filter(Boolean);
+            if (validLocs.length > 0) {
+                var lastLoc = validLocs[validLocs.length - 1];
+                if (/\u7535\u4FE1|\u79FB\u52A8|\u8054\u901A|\u5E7F\u7535/i.test(lastLoc)) {
+                    localISPName = fmtISP(lastLoc);
+                }
+            }
+
             var tags = localIpData.location.filter(function(i) {
                 return i && !/\u7535\u4FE1|\u79FB\u52A8|\u8054\u901A|\u5E7F\u7535|IP|China|\u4E2D\u56FD|\u6570\u636E\u4E2D\u5FC3/i.test(i);
             });
@@ -491,7 +512,8 @@ export default async function (ctx) {
                 locStr = uniqueTags[0];
             }
         }
-        var localPublicIpContent = [localIpData.ip || "\u672A\u83B7\u53D6", locStr].filter(Boolean).join(" - ");
+        
+        var localPublicIpContent = [localIpData.ip || "\u672A\u83B7\u53D6", locStr, localISPName].filter(Boolean).join(" - ");
 
         // ===================== 生成纯净的刷新时间文本 =====================
         var nowObj = new Date();
