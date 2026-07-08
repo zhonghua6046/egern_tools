@@ -1,7 +1,7 @@
 /**
  * IP multi-source purity check widget + Streaming/AI unlock detection
  * Sources: IPPure / ipapi.is / IP2Location / Scamalytics / DB-IP / ipregistry / ipinfo
- * Unlock: ChatGPT / Gemini / Netflix / TikTok / YouTube Premium
+ * Unlock: ChatGPT / Gemini / Netflix / YouTube Premium / Netflix / Disney+ / TikTok
  * Env: POLICY, MARK_IP
  * Layout: Custom Left-Aligned Order + Compact fit
  */
@@ -22,7 +22,15 @@ export default async function (ctx) {
     var policy = ctx.env.POLICY || "";
     var markIP = (ctx.env.MARK_IP || "").toLowerCase() === "true";
 
-    var BASE_UA = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Mobile/15E148 Safari/604.1";
+    var BASE_UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/94.0.4606.61 Safari/537.36";
+    var cb = "?t=" + Date.now();
+    
+    var reqHeaders = {
+        'User-Agent': BASE_UA,
+        'Connection': 'close',
+        'Cache-Control': 'no-cache',
+        'Pragma': 'no-cache'
+    };
 
     async function safe(fn) { try { return await fn(); } catch (e) { return null; } }
 
@@ -48,6 +56,14 @@ export default async function (ctx) {
         if (policy && policy !== "DIRECT") opts.policy = policy;
         if (extraOpts) { for (var k in extraOpts) opts[k] = extraOpts[k]; }
         return await ctx.http.get(url, opts);
+    }
+    
+    async function postRaw(url, body, headers, extraOpts) {
+        var opts = { timeout: 10000, body: body };
+        if (headers) opts.headers = headers;
+        if (policy && policy !== "DIRECT") opts.policy = policy;
+        if (extraOpts) { for (var k in extraOpts) opts[k] = extraOpts[k]; }
+        return await ctx.http.post(url, opts);
     }
 
     function jp(s) { try { return JSON.parse(s); } catch (e) { return null; } }
@@ -77,8 +93,6 @@ export default async function (ctx) {
         if (/(^|[\s-])(cbn|broadcast)\b|\u5E7F\u7535/.test(s)) return "\u4E2D\u56FD\u5E7F\u7535";
         return raw || "\u672A\u77E5";
     }
-
-    // ===================== 评分函数 =====================
 
     function gradeIppure(score) {
         var s = ti(score); if (s === null) return null;
@@ -132,37 +146,19 @@ export default async function (ctx) {
         return null;
     }
 
-    function gradeIpreg(j, ipinfoDetected) {
-        if (!j || j.code) return null;
-        var sec = j.security || {};
-        var tags = [];
-        if (sec.is_proxy) tags.push('Proxy');
-        if (sec.is_tor || sec.is_tor_exit) tags.push('Tor');
-        if (sec.is_vpn) tags.push('VPN');
-        if (sec.is_abuser) tags.push('Abuser');
-        if (ipinfoDetected && ipinfoDetected.length) {
-            for (var i = 0; i < ipinfoDetected.length; i++) {
-                if (ipinfoDetected[i] === 'Hosting') continue;
-                if (tags.indexOf(ipinfoDetected[i]) === -1) tags.push(ipinfoDetected[i]);
-            }
-        }
-        var tagStr = tags.length ? ' ' + tags.join('/') : '';
-        if (!tags.length) return { sev: 0, t: 'ipregistry: \u4F4E\u5371' };
-        var sev = tags.indexOf('Tor') !== -1 || tags.indexOf('Abuser') !== -1 ? 3 : tags.length >= 2 ? 2 : 1;
-        return { sev: sev, t: 'ipregistry: ' + tags.join('/') };
-    }
-
     function sevColor(sev) {
         if (sev >= 4) return C_RED;
         if (sev >= 3) return C_ORANGE;
         if (sev >= 1) return C_YELLOW;
         return C_GREEN;
     }
+    
     function sevIcon(sev) {
         if (sev >= 3) return 'xmark.shield.fill';
         if (sev >= 1) return 'exclamationmark.shield.fill';
         return 'checkmark.shield.fill';
     }
+    
     function sevText(sev) {
         if (sev >= 4) return '\u6781\u9AD8\u98CE\u9669';
         if (sev >= 3) return '\u9AD8\u98CE\u9669';
@@ -184,25 +180,13 @@ export default async function (ctx) {
         return r.length ? r.join('/') + ' (' + code + ')' : code;
     }
 
-    // ===================== 数据获取 =====================
-
     async function fetchIpapi(ip) { return jp(await get('https://api.ipapi.is/?q=' + encodeURIComponent(ip))); }
     async function fetchDbip(ip) { return await get('https://db-ip.com/' + encodeURIComponent(ip)); }
     async function fetchScam(ip) { return await get('https://scamalytics.com/ip/' + encodeURIComponent(ip)); }
 
-    async function fetchIpreg(ip) {
-        var html = await get('https://ipregistry.co', { 'User-Agent': 'Mozilla/5.0' });
-        var m = String(html).match(/apiKey="([a-zA-Z0-9]+)"/);
-        if (!m) return null;
-        return jp(await get('https://api.ipregistry.co/' + encodeURIComponent(ip) + '?hostname=true&key=' + m[1], {
-            'Origin': 'https://ipregistry.co', 'Referer': 'https://ipregistry.co/', 'User-Agent': 'Mozilla/5.0'
-        }));
-    }
-
     async function fetchIp2loc(ip) {
         var html = await get('https://www.ip2location.io/' + encodeURIComponent(ip));
-        var um = html.match(/Usage\s*Type<\/label>\s*<p[^>]*>\s*\(([A-Z]+)\)/i)
-            || html.match(/Usage\s*Type<\/label>\s*<p[^>]*>\s*([A-Z]+(?:\/[A-Z]+)?)\s*</i);
+        var um = html.match(/Usage\s*Type<\/label>\s*<p[^>]*>\s*\(([A-Z]+)\)/i) || html.match(/Usage\s*Type<\/label>\s*<p[^>]*>\s*([A-Z]+(?:\/[A-Z]+)?)\s*</i);
         var fm = html.match(/Fraud\s*Score<\/label>\s*<p[^>]*>\s*(\d+)/i);
         return { usageType: um ? um[1] : null, fraudScore: fm ? ti(fm[1]) : null };
     }
@@ -225,45 +209,89 @@ export default async function (ctx) {
         return json.data || json;
     }
 
-    // ===================== 解锁检测 =====================
+    async function checkYouTube() {
+        try {
+            var res = await getRaw('https://www.youtube.com/premium' + cb, reqHeaders);
+            if (!res) return "\u274C";
+            var data = await res.text();
+            if (data.indexOf('Premium is not available') !== -1 || data.indexOf('YouTube Premium is not available') !== -1) return "\u274C";
+            if (data.indexOf('www.google.cn') !== -1) return "CN";
+            var m = data.match(/"countryCode":"(.*?)"/);
+            var reg = (m && m[1]) ? m[1].toUpperCase() : "US";
+            if (reg.length > 3 || reg === "OK") reg = "US";
+            return reg;
+        } catch (e) { return "\u274C"; }
+    }
+
+    async function checkNetflix() {
+        try {
+            var res1 = await getRaw('https://www.netflix.com/title/81280792' + cb, reqHeaders);
+            if (res1 && (res1.status === 200 || res1.status === 301 || res1.status === 302)) {
+                var headers = res1.headers || {};
+                var origUrl = headers['x-originating-url'] || headers['X-Originating-Url'] || "";
+                var parts = origUrl.split('/');
+                var region = (parts.length > 3) ? parts[3].split('-')[0] : "US";
+                if (region.toUpperCase() === "TITLE" || region === "") region = "US";
+                return region.toUpperCase();
+            }
+            var res2 = await getRaw('https://www.netflix.com/title/80018499' + cb, reqHeaders);
+            if (res2 && res2.status === 200) return "\u4EC5\u81EA\u5236";
+        } catch (e) {}
+        return "\u274C";
+    }
+
+    async function checkDisney() {
+        try {
+            var body = {
+                query: 'mutation registerDevice($input: RegisterDeviceInput!) { registerDevice(registerDevice: $input) { grant { grantType assertion } } }',
+                variables: {
+                    input: {
+                        applicationRuntime: 'chrome',
+                        attributes: { browserName: 'chrome', browserVersion: '94.0.4606', manufacturer: 'apple', model: null, operatingSystem: 'macintosh', operatingSystemVersion: '10.15.7', osDeviceIds: [] },
+                        deviceFamily: 'browser', deviceLanguage: 'en', deviceProfile: 'macosx'
+                    }
+                }
+            };
+            var authHeaders = Object.assign({}, reqHeaders, {
+                'Accept-Language': 'en',
+                'Authorization': 'ZGlzbmV5JmJyb3dzZXImMS4wLjA.Cu56AgSfBTDag5NiRA81oLHkDZfu5L3CKadnefEAY84',
+                'Content-Type': 'application/json'
+            });
+            var res = await postRaw('https://disney.api.edge.bamgrid.com/graph/v1/device/graphql' + cb, JSON.stringify(body), authHeaders);
+            if (res) {
+                var text = await res.text();
+                var data = JSON.parse(text);
+                var sdk = data && data.extensions && data.extensions.sdk;
+                if (sdk) {
+                    var inLoc = sdk.session.inSupportedLocation;
+                    var cc = sdk.session.location.countryCode;
+                    if (inLoc === true || inLoc === 'true') {
+                        return cc.toUpperCase();
+                    } else {
+                        return cc.toUpperCase() + " (Soon)";
+                    }
+                }
+            }
+        } catch (e) {
+            try {
+                var res2 = await getRaw('https://www.disneyplus.com/' + cb, reqHeaders);
+                var text2 = res2 ? await res2.text() : "";
+                var m = text2.match(/Region: ([A-Z]{2})/);
+                if (m) return m[1].toUpperCase();
+            } catch (e2) {}
+        }
+        return "\u274C";
+    }
 
     async function checkChatGPT() {
         try {
-            var headRes = await getRaw("https://chatgpt.com", { "User-Agent": BASE_UA }, { redirect: 'manual' });
-            var headOk = !!headRes;
-            var locationHeader = "";
-            if (headRes && headRes.headers) {
-                locationHeader = headRes.headers.get ? headRes.headers.get('location') || '' : (headRes.headers.location || headRes.headers.Location || '');
-            }
-            var webAccessible = headOk && !!locationHeader;
-
-            var iosRes = await getRaw("https://ios.chat.openai.com", { "User-Agent": BASE_UA });
-            var iosBody = iosRes ? await iosRes.text() : "";
-            var cfDetails = "";
-            try {
-                var asJson = iosBody ? JSON.parse(iosBody) : null;
-                if (asJson && asJson.cf_details) cfDetails = String(asJson.cf_details);
-            } catch (e2) {
-                var cm = iosBody ? iosBody.match(/"cf_details"\s*:\s*"([^"]*)"/) : null;
-                if (cm && cm[1]) cfDetails = cm[1];
-            }
-
-            var appBlocked = !iosBody
-                || iosBody.indexOf("blocked_why_headline") !== -1
-                || iosBody.indexOf("unsupported_country_region_territory") !== -1
-                || cfDetails.indexOf("(1)") !== -1
-                || cfDetails.indexOf("(2)") !== -1;
-            var appAccessible = !!iosBody && !appBlocked;
-
-            if (!webAccessible && !appAccessible) return "\u274C";
-            if (appAccessible && !webAccessible) return "APP";
-            if (webAccessible && appAccessible) {
-                var traceTxt = await get("https://chatgpt.com/cdn-cgi/trace");
-                if (traceTxt) {
-                    var tm = traceTxt.match(/loc=([A-Z]{2})/);
-                    if (tm && tm[1]) return tm[1];
-                }
-                return "OK";
+            var res = await getRaw('https://ios.chat.openai.com/public-api/auth0/verify-device-registration-token' + cb, reqHeaders);
+            if (res && (res.status === 403 || res.status === 401)) return "\u274C";
+            var traceRes = await getRaw('https://chatgpt.com/cdn-cgi/trace' + cb, reqHeaders);
+            if (traceRes) {
+                var text = await traceRes.text();
+                var m = text.match(/loc=([A-Z]{2})/);
+                if (m) return m[1].toUpperCase();
             }
             return "\u274C";
         } catch (e) { return "\u274C"; }
@@ -271,100 +299,64 @@ export default async function (ctx) {
 
     async function checkGemini() {
         try {
-            var bodyRaw = 'f.req=[["K4WWud","[[0],[\\"en-US\\"]]",null,"generic"]]';
-            var txt = await post('https://gemini.google.com/_/BardChatUi/data/batchexecute', bodyRaw, {
-                "User-Agent": BASE_UA, "Accept-Language": "en-US", "Content-Type": "application/x-www-form-urlencoded"
-            });
-            if (!txt) return "\u274C";
-
-            var m = txt.match(/"countryCode"\s*:\s*"([A-Z]{2})"/i);
-            if (m && m[1]) return m[1].toUpperCase();
-            m = txt.match(/"requestCountry"\s*:\s*\{[^}]*"id"\s*:\s*"([A-Z]{2})"/i);
-            if (m && m[1]) return m[1].toUpperCase();
-            m = txt.match(/\[\[\\?"([A-Z]{2})\\?",\\?"S/);
-            if (m && m[1]) return m[1].toUpperCase();
-            var idx = txt.indexOf('K4WWud');
-            if (idx >= 0) {
-                var slice = txt.slice(idx, idx + 200);
-                var m2 = slice.match(/([A-Z]{2})/);
-                if (m2 && m2[1]) return m2[1].toUpperCase();
-            }
-            return "OK";
+            var res = await getRaw('https://gemini.google.com/app' + cb, reqHeaders);
+            var data = res ? await res.text() : "";
+            if (data.indexOf('is not currently supported') !== -1 || data.indexOf('unavailable') !== -1) return "\u274C";
+            var m = data.match(/"countryCode":"([A-Z]{2})"/i) || data.match(/\\"([A-Z]{2})\\",\\"/);
+            return m ? m[1].toUpperCase() : "OK";
         } catch (e) { return "\u274C"; }
     }
-
-    async function checkNetflix() {
+    
+    async function checkClaude() {
         try {
-            var titles = [
-                "https://www.netflix.com/title/81280792",
-                "https://www.netflix.com/title/70143836"
-            ];
-            var fetchTitle = async function (url) {
-                try {
-                    var body = await get(url, { "User-Agent": BASE_UA });
-                    return body || "";
-                } catch (e) { return ""; }
-            };
-            var bodies = await Promise.all([fetchTitle(titles[0]), fetchTitle(titles[1])]);
-            var t1 = bodies[0], t2 = bodies[1];
-            if (!t1 && !t2) return "\u274C";
-
-            var oh1 = t1 && /oh no!/i.test(t1);
-            var oh2 = t2 && /oh no!/i.test(t2);
-            if (oh1 && oh2) return "\uD83C\uDF7F"; 
-
-            var allBodies = [t1, t2];
-            for (var i = 0; i < allBodies.length; i++) {
-                var b = allBodies[i];
-                if (!b) continue;
-                var rm = b.match(/"countryCode"\s*:\s*"?([A-Z]{2})"?/);
-                if (rm && rm[1]) return rm[1];
+            var res = await getRaw("https://claude.ai/login", reqHeaders);
+            if (!res) return "\u274C";
+            var status = res.status;
+            var body = await res.text();
+            if (body.indexOf("App unavailable") !== -1 || body.indexOf("certain regions") !== -1) return "\u274C";
+            if (status === 403 && body.indexOf("1020") !== -1) return "\u274C";
+            if (status === 200 || status === 301 || status === 302 || (status === 403 && (body.indexOf("cf-turnstile") !== -1 || body.indexOf("Just a moment") !== -1 || body.indexOf("Challenge") !== -1))) {
+                var traceRes = await getRaw('https://claude.ai/cdn-cgi/trace' + cb, reqHeaders);
+                if (traceRes) {
+                    var traceTxt = await traceRes.text();
+                    var m = traceTxt.match(/loc=([A-Z]{2})/);
+                    if (m && m[1]) return m[1].toUpperCase();
+                }
+                return "OK";
             }
-            return "OK";
+            return "\u274C";
         } catch (e) { return "\u274C"; }
     }
-
+    
     async function checkTikTok() {
         try {
-            var body1 = await get("https://www.tiktok.com/", { "User-Agent": BASE_UA });
-            if (body1 && body1.indexOf("Please wait...") !== -1) {
-                try { body1 = await get("https://www.tiktok.com/explore", { "User-Agent": BASE_UA }); } catch (e2) { }
+            var body = await get("https://www.tiktok.com/" + cb, reqHeaders);
+            if (body && (body.indexOf("Please wait...") !== -1 || body.indexOf("Access Denied") !== -1)) {
+                body = await get("https://www.tiktok.com/@tiktok" + cb, reqHeaders) || body;
             }
-            var m1 = body1 ? body1.match(/"region"\s*:\s*"([A-Z]{2})"/) : null;
-            if (m1 && m1[1]) return m1[1];
-
-            var body2 = await get("https://www.tiktok.com/", {
-                "User-Agent": BASE_UA,
-                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-                "Accept-Language": "en"
-            });
-            var m2 = body2 ? body2.match(/"region"\s*:\s*"([A-Z]{2})"/) : null;
-            if (m2 && m2[1]) return m2[1];
-            if (body1 || body2) return "OK";
-            return "\u274C";
-        } catch (e) { return "\u274C"; }
-    }
-
-    async function checkYouTube() {
-        try {
-            var body = await get('https://www.youtube.com/premium', { "User-Agent": BASE_UA, "Accept-Language": "en" });
             if (!body) return "\u274C";
-            if (body.indexOf('www.google.cn') !== -1) return "CN";
+            
+            var m = body.match(/"region"\s*:\s*"([A-Za-z]{2})"/i) || 
+                    body.match(/"sys_region"\s*:\s*"([A-Za-z]{2})"/i) || 
+                    body.match(/"location"\s*:\s*"([A-Za-z]{2})"/i) || 
+                    body.match(/"country"\s*:\s*"([A-Za-z]{2})"/i) || 
+                    body.match(/"countryCode"\s*:\s*"([A-Za-z]{2})"/i);
+                    
+            if (m && m[1]) return m[1].toUpperCase();
 
-            var isNotAvailable = body.indexOf('Premium is not available in your country') !== -1 || body.indexOf('YouTube Premium is not available') !== -1;
-            var m = body.match(/"contentRegion"\s*:\s*"?([A-Z]{2})"?/);
-            var region = (m && m[1]) ? m[1].toUpperCase() : null;
-            var isAvailable = body.indexOf('ad-free') !== -1 || body.indexOf('Ad-free') !== -1;
+            var mUA = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Mobile/15E148 Safari/604.1";
+            var bodyMob = await get("https://www.tiktok.com/" + cb, Object.assign({}, reqHeaders, { "User-Agent": mUA }));
+            if (bodyMob) {
+                var mMob = bodyMob.match(/"region"\s*:\s*"([A-Za-z]{2})"/i) || 
+                           bodyMob.match(/"sys_region"\s*:\s*"([A-Za-z]{2})"/i) || 
+                           bodyMob.match(/"country"\s*:\s*"([A-Za-z]{2})"/i);
+                if (mMob && mMob[1]) return mMob[1].toUpperCase();
+            }
 
-            if (isNotAvailable) return "\u274C";
-            if (isAvailable && region) return region;
-            if (isAvailable && !region) return "OK";
-            if (region) return region;
+            if (body.indexOf('tiktok') !== -1 || (bodyMob && bodyMob.indexOf('tiktok') !== -1)) return "OK";
             return "\u274C";
         } catch (e) { return "\u274C"; }
     }
-
-    // ===================== 左对齐布局组件 (极度压缩版) =====================
 
     function LeftRow(iconName, iconColor, label, items, fontSize) {
         var fz = fontSize || 10;
@@ -375,7 +367,6 @@ export default async function (ctx) {
         for (var i = 0; i < items.length; i++) {
             children.push(items[i]);
         }
-        // 末尾强制加 spacer，把所有内容向左推（左对齐）
         children.push({ type: 'spacer' });
         return {
             type: 'stack', direction: 'row', alignItems: 'center', gap: 4,
@@ -384,7 +375,7 @@ export default async function (ctx) {
     }
 
     function ScoreRow(grade, fz) {
-        var sz = fz || 9; // 默认缩小字号防挤出
+        var sz = fz || 9;
         var col = sevColor(grade.sev);
         var parts = grade.t.split(': ');
         var src = parts[0] || grade.t;
@@ -402,9 +393,13 @@ export default async function (ctx) {
 
     function UnlockRow(name, result, fz) {
         var sz = fz || 9;
-        var isOk = result !== "\u274C" && result !== "\uD83C\uDF7F" && result !== "\u23F3" && result !== "CN";
-        var color = isOk ? C_GREEN : (result === "\uD83C\uDF7F" || result === "\u23F3" || result === "APP") ? C_YELLOW : C_RED;
-        var icon = isOk ? 'checkmark.circle.fill' : (result === "\uD83C\uDF7F" || result === "\u23F3" || result === "APP") ? 'exclamationmark.circle.fill' : 'xmark.circle.fill';
+        var isFail = result === "\u274C" || result === "CN";
+        var isWarn = result === "\uD83C\uDF7F" || result === "\u23F3" || result === "APP" || result.indexOf("\u4EC5\u81EA\u5236") !== -1 || result.indexOf("Soon") !== -1;
+        var isOk = !isFail && !isWarn;
+        
+        var color = isOk ? C_GREEN : (isWarn ? C_YELLOW : C_RED);
+        var icon = isOk ? 'checkmark.circle.fill' : (isWarn ? 'exclamationmark.circle.fill' : 'xmark.circle.fill');
+        
         return {
             type: 'stack', direction: 'row', alignItems: 'center', gap: 3,
             children: [
@@ -415,8 +410,6 @@ export default async function (ctx) {
             ]
         };
     }
-
-    // ===================== 主逻辑 =====================
 
     try {
         var ip = null, cachedIpapi = null;
@@ -432,27 +425,29 @@ export default async function (ctx) {
         var ippureScore = null;
         try { var d2 = jp(await get('https://my.ippure.com/v1/info')); ippureScore = d2 && d2.fraudScore; } catch (e) { }
 
-        // 并行查询
         var results = await Promise.all([
             cachedIpapi ? Promise.resolve(cachedIpapi) : safe(function () { return fetchIpapi(ip); }),
             safe(function () { return fetchIp2loc(ip); }),
             safe(function () { return fetchIpinfo(ip); }),
             safe(function () { return fetchDbip(ip); }),
             safe(function () { return fetchScam(ip); }),
-            safe(function () { return fetchIpreg(ip); }),
             safe(checkChatGPT),
             safe(checkGemini),
             safe(checkNetflix),
             safe(checkTikTok),
             safe(checkYouTube),
-            safe(fetchLocalPublicIP)
+            safe(checkDisney),          
+            safe(checkClaude),
+            safe(fetchLocalPublicIP)    
         ]);
         var rIpapi = results[0], rIp2loc = results[1], rIpinfo = results[2];
-        var rDbip = results[3], rScam = results[4], rIpreg = results[5];
-        var uGPT = results[6] || "\u274C", uGemini = results[7] || "\u274C";
-        var uNetflix = results[8] || "\u274C", uTikTok = results[9] || "\u274C";
-        var uYouTube = results[10] || "\u274C";
-        var localIpData = results[11] || {};
+        var rDbip = results[3], rScam = results[4];
+        var uGPT = results[5] || "\u274C", uGemini = results[6] || "\u274C";
+        var uNetflix = results[7] || "\u274C", uTikTok = results[8] || "\u274C";
+        var uYouTube = results[9] || "\u274C";
+        var uDisney = results[10] || "\u274C";
+        var uClaude = results[11] || "\u274C";
+        var localIpData = results[12] || {};
 
         var ipapiD = rIpapi || {};
         var asnText = (ipapiD.asn && ipapiD.asn.asn) ? ('AS' + ipapiD.asn.asn + ' ' + (ipapiD.asn.org || '')).trim() : '\u672A\u77E5';
@@ -462,21 +457,17 @@ export default async function (ctx) {
         var loc = (toFlag(cc) + ' ' + country + ' ' + city).trim() || '\u672A\u77E5\u4F4D\u7F6E';
         var hosting = usageText(rIp2loc && rIp2loc.usageType);
 
-        // ===================== 本地网络及公网 IP 逻辑 (核心优化区) =====================
         var d_ctx = ctx.device || {};
         var wifiSsid = (d_ctx.wifi && d_ctx.wifi.ssid) ? d_ctx.wifi.ssid : "";
         var cellularRadio = (d_ctx.cellular && d_ctx.cellular.radio) ? d_ctx.cellular.radio : "";
         
         var rawISP = (Array.isArray(localIpData.location) ? localIpData.location[localIpData.location.length-1] : "") || (ipapiD.asn && ipapiD.asn.org) || "";
         
-        // 生成更美观的当前网络名称 (顶栏左上角)
         var currentISP = wifiSsid;
         if (!wifiSsid) {
             var fullISP = fmtISP(rawISP);
-            // 去掉“中国”前缀，让 UI 像原生状态栏一样干净，变成“移动”、“电信”、“联通”等
             var shortISP = fullISP.replace("中国", ""); 
             
-            // 如果处于蜂窝网络，智能追加代际 (4G/5G)
             if (cellularRadio) {
                 var map = { GPRS:"2G", EDGE:"2G", LTE:"4G", "LTE-CA":"4G+", NR:"5G" };
                 var gen = map[cellularRadio] || cellularRadio;
@@ -489,7 +480,7 @@ export default async function (ctx) {
         var netIcon = wifiSsid ? 'wifi' : (cellularRadio ? 'antenna.radiowaves.left.and.right' : 'wifi.slash');
 
         var locStr = "";
-        var localISPName = ""; // 本地 IP 行显示的运营商
+        var localISPName = "";
         if (Array.isArray(localIpData.location)) {
             var validLocs = localIpData.location.filter(Boolean);
             if (validLocs.length > 0) {
@@ -515,22 +506,18 @@ export default async function (ctx) {
         
         var localPublicIpContent = [localIpData.ip || "\u672A\u83B7\u53D6", locStr, localISPName].filter(Boolean).join(" - ");
 
-        // ===================== 生成纯净的刷新时间文本 =====================
         var nowObj = new Date();
         var timeH = nowObj.getHours().toString().padStart(2, '0');
         var timeM = nowObj.getMinutes().toString().padStart(2, '0');
         var timeS = nowObj.getSeconds().toString().padStart(2, '0');
         var refreshTimeStr = timeH + ':' + timeM + ':' + timeS;
 
-
-        // ===================== 多源评分组装 =====================
         var grades = [
             gradeIppure(ippureScore),
             gradeIpapi(rIpapi),
             gradeIp2loc(rIp2loc && rIp2loc.fraudScore),
             gradeScam(rScam),
-            gradeDbip(rDbip),
-            gradeIpreg(rIpreg, rIpinfo),
+            gradeDbip(rDbip)
         ].filter(Boolean);
 
         var maxSev = 0;
@@ -539,7 +526,6 @@ export default async function (ctx) {
         }
         var showIP = markIP ? maskIP(ip) : ip;
 
-        // 第三行：落地IP + DCH数据中心 + 检测盾牌评分结果 全部紧凑排列
         var mProxyItems = [
             { type: 'text', text: showIP, font: { size: 10, weight: 'bold', family: 'Menlo' }, textColor: C_GREEN, maxLines: 1, minScale: 0.8 }
         ];
@@ -551,10 +537,7 @@ export default async function (ctx) {
 
         var family = ctx.widgetFamily || 'systemMedium';
 
-        // ===================== systemMedium - 重新排版 (极度抗重叠) =====================
         if (family === 'systemMedium') {
-            
-            // 第一行：左侧当前网络，右侧还原 A 脚本 UI 风格：timer 图标 + C_SUB 次要色 + 常规字体
             var row1Network = {
                 type: 'stack', direction: 'row', alignItems: 'center', gap: 5,
                 children: [
@@ -570,32 +553,30 @@ export default async function (ctx) {
                 ]
             };
 
-            // 底部左侧：解锁检测 (共5行)
             var unlocksAll = [
-                UnlockRow('GPT', uGPT, 9),
-                UnlockRow('Gemini', uGemini, 9),
                 UnlockRow('YouTube', uYouTube, 9),
-                UnlockRow('\u5948\u98DE', uNetflix, 9),
-                UnlockRow('TikTok', uTikTok, 9)
+                UnlockRow('Netflix', uNetflix, 9),
+                UnlockRow('Disney+', uDisney, 9),
+                UnlockRow('ChatGPT', uGPT, 9),
+                UnlockRow('Gemini', uGemini, 9),
+                UnlockRow('Claude', uClaude, 9)
             ];
 
-            // 底部右侧：多源评分 (可多达6行，字号9不会超出边界)
             var scoreRows = [];
             for (var i = 0; i < grades.length; i++) {
                 scoreRows.push(ScoreRow(grades[i], 9));
             }
+            scoreRows.push(UnlockRow('TikTok', uTikTok, 9));
 
             return {
-                // 大幅缩减外边距(padding)和行距(gap)，为内容腾出绝对足够的物理空间
-                type: 'widget', padding: [8, 12, 8, 12], gap: 3, backgroundColor: BG_COLOR,
+                type: 'widget', padding: [6, 12, 6, 12], gap: 2, backgroundColor: BG_COLOR,
                 children: [
-                    row1Network, // 第 1 行：网络 + 1:1复刻的刷新时间
-                    LeftRow('location.circle.fill', C_BLUE, '本地', [{ type: 'text', text: localPublicIpContent, font: { size: 10, weight: 'bold', family: 'Menlo' }, textColor: C_MAIN, maxLines: 1 }], 10), // 第 2 行：本地
-                    LeftRow('globe', C_ICON_IP, '落地', mProxyItems, 10), // 第 3 行：代理IP + DCH + 检测结果
-                    LeftRow('number.square.fill', C_ICON_IP, '归属', [{ type: 'text', text: asnText, font: { size: 10, weight: 'bold', family: 'Menlo' }, textColor: C_GREEN, maxLines: 1 }], 10), // 第 4 行：归属
-                    LeftRow('mappin.and.ellipse', C_ICON_LO, '位置', [{ type: 'text', text: loc, font: { size: 10, weight: 'bold' }, textColor: C_MAIN, maxLines: 1 }], 10), // 第 5 行：位置
-                    
-                    // 第 6 行(灵活填充到底部)：分为左右两列显示解锁和多源评分
+                    row1Network, 
+                    LeftRow('location.circle.fill', C_BLUE, '本地', [{ type: 'text', text: localPublicIpContent, font: { size: 10, weight: 'bold', family: 'Menlo' }, textColor: C_MAIN, maxLines: 1 }], 10),
+                    LeftRow('globe', C_ICON_IP, '落地', mProxyItems, 10), 
+                    LeftRow('number.square.fill', C_ICON_IP, '归属', [{ type: 'text', text: asnText, font: { size: 10, weight: 'bold', family: 'Menlo' }, textColor: C_GREEN, maxLines: 1 }], 10), 
+                    LeftRow('mappin.and.ellipse', C_ICON_LO, '位置', [{ type: 'text', text: loc, font: { size: 10, weight: 'bold' }, textColor: C_MAIN, maxLines: 1 }], 10),
+                    { type: 'spacer', length: 2 },
                     {
                         type: 'stack', direction: 'row', gap: 8, flex: 1, children: [
                             { type: 'stack', direction: 'column', gap: 2, flex: 1, children: unlocksAll },
@@ -606,7 +587,6 @@ export default async function (ctx) {
             };
         }
 
-        // SystemSmall / Large 兼容适配 (确保其它尺寸不崩溃，同样采用左对齐)
         if (family === 'systemSmall') {
             return {
                 type: 'widget', padding: 10, gap: 4, backgroundColor: BG_COLOR,
@@ -632,13 +612,19 @@ export default async function (ctx) {
             };
         }
 
-        // systemLarge / ExtraLarge (其余尺寸兼容逻辑)
         var lgScoreRows = [];
         for (var i = 0; i < grades.length; i++) { lgScoreRows.push(ScoreRow(grades[i], 11)); }
+        lgScoreRows.push(UnlockRow('TikTok', uTikTok, 11));
+        
         var lgUnlockRows = [
-            UnlockRow('ChatGPT', uGPT, 11), UnlockRow('Gemini', uGemini, 11),
-            UnlockRow('Netflix', uNetflix, 11), UnlockRow('TikTok', uTikTok, 11), UnlockRow('YouTube', uYouTube, 11)
+            UnlockRow('YouTube', uYouTube, 11), 
+            UnlockRow('Netflix', uNetflix, 11), 
+            UnlockRow('Disney+', uDisney, 11),
+            UnlockRow('ChatGPT', uGPT, 11), 
+            UnlockRow('Gemini', uGemini, 11),
+            UnlockRow('Claude', uClaude, 11)
         ];
+        
         return {
             type: 'widget', padding: 14, gap: 8, backgroundColor: BG_COLOR,
             children: [
@@ -662,8 +648,8 @@ export default async function (ctx) {
                 { type: 'stack', direction: 'row', backgroundColor: { light: '#E5E5EA', dark: '#38383A' }, height: 1 },
                 {
                     type: 'stack', direction: 'row', gap: 10, flex: 1, children: [
-                        { type: 'stack', direction: 'column', gap: 4, flex: 1, children: lgScoreRows },
-                        { type: 'stack', direction: 'column', gap: 4, flex: 1, children: lgUnlockRows }
+                        { type: 'stack', direction: 'column', gap: 4, flex: 1, children: lgUnlockRows },
+                        { type: 'stack', direction: 'column', gap: 4, flex: 1, children: lgScoreRows }
                     ]
                 }
             ]
