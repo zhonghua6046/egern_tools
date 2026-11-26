@@ -1,0 +1,12 @@
+name: 网络状态与流媒体解锁
+description: 检测本地/落地 IP 风险评估，以及 YouTube、Netflix、Disney+、ChatGPT、Gemini、Claude、TikTok 分流解锁状态
+# author: 
+# 改版自：https://raw.githubusercontent.com/mickeu/Egern/refs/heads/main/数据中心.js
+
+widgets:
+  - name: 网络状态检测
+    script_url: https://raw.githubusercontent.com/zhonghua6046/egern_tools/refs/heads/main/ipandunlock.js
+    timeout: 15
+    env:
+      # 仅用于顶部「落地 IP」与风险查询；留空则默认走 Egern 最终规则（FINAL）
+      POLICY: ""
