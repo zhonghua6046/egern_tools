@@ -1,8 +1,0 @@
-name: 网络状态与流媒体解锁
-description: IP 风险评估与流媒体分流解锁检测
-
-widgets:
-  - name: 网络状态检测
-    script_url: https://raw.githubusercontent.com/zhonghua6046/egern_tools/refs/heads/main/ipandunlock.js
-    env:
-      POLICY: ""
