@@ -8,5 +8,4 @@ widgets:
     script_url: https://raw.githubusercontent.com/zhonghua6046/egern_tools/refs/heads/main/ipandunlock.js
     timeout: 15
     env:
-      # 仅用于顶部「落地 IP」与风险查询；留空则默认走 Egern 最终规则（FINAL）
       POLICY: ""
